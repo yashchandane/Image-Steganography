@@ -1,102 +1,144 @@
-  
-from PIL import Image                                                              #Importing image function from Python Image Library
-import binascii                                                                    # Enables Binary to ASCII conversion and vice-versa
+# Python program implementing Image Steganography
 
-def rgb2hex(r, g, b):
-        return '#{:02x}{:02x}{:02x}'.format(r, g, b)                               #Converts RGB values of the pixels to Hexadecimal form and also appends a '#' to the front
+# PIL module is used to extract
+# pixels of image and modify it
+from PIL import Image
 
-def hex2rgb(hexcode):
-        return tuple(map(ord, hexcode[1:].decode('hex')))                          #Returns the Hexafied RGB components in the form of a tuple
+# Convert encoding data into 8-bit binary
+# form using ASCII value of characters
+def genData(data):
 
-def str2bin(message):
-        binary = bin(int(binascii.hexlify(message), 16))
-        return binary[2:]                                                                  #Strip '0b' from the binary
+		# list of binary codes
+		# of given data
+		newd = []
 
-def bin2str(binary):
-        message = binascii.unhexlify('%x' % (int('0b' + binary, 2)))
-        return message
+		for i in data:
+			newd.append(format(ord(i), '08b'))
+		return newd
 
-def encode(hexcode, digit):
-        if hexcode[-1] in ('0', '1', '2', '3', '4', '5'):				#If the last value of the blue pixel lies in range
-                hexcode = hexcode[:-1] + digit						 #Replace with message bit
-                return hexcode								 #Return modified pixel info
-        else:
-                return None
+# Pixels are modified according to the
+# 8-bit binary data and finally returned
+def modPix(pix, data):
 
-def decode(hexcode):
-        if hexcode[-1] in ('0', '1', '2', '3', '4', '5'):
-                return hexcode[-1]
-        else:
-                return None
+	datalist = genData(data)
+	lendata = len(datalist)
+	imdata = iter(pix)
 
-def hide(filename, message):
-        img = Image.open(filename)
-        binary = str2bin(message) + '1111111111111110'
+	for i in range(lendata):
 
-        if img.mode in ('RGBA'):
-                img = img.convert('RGBA')
-                datas = img.getdata()
+		# Extracting 3 pixels at a time
+		pix = [value for value in imdata.__next__()[:3] +
+								imdata.__next__()[:3] +
+								imdata.__next__()[:3]]
 
-                newData = []
-                digit = 0
-                for item in datas:
-                        if (digit < len(binary)):
-                                newpix = encode(rgb2hex(item[0], item[1], item[2]), binary[digit])
-                                if newpix == None:
-                                        newData.append(item)
-                                else:
-                                        r,g,b = hex2rgb(newpix)
-                                        newData.append((r,g,b,255))
-                                        digit += 1
-                        else:
-                                newData.append(item)
-                img.putdata(newData)
-                img.save(filename[:-4] + '2.png', "PNG")
+		# Pixel value should be made
+		# odd for 1 and even for 0
+		for j in range(0, 8):
+			if (datalist[i][j] == '0' and pix[j]% 2 != 0):
+				pix[j] -= 1
 
-                return "\n\n Completed !!! Your message was successfully encrypted into " + filename[:-4] + '2.png'
-        return " ***** Incorrect Image Mode was opened and we weren't able to encrypt your message. ******"
+			elif (datalist[i][j] == '1' and pix[j] % 2 == 0):
+				if(pix[j] != 0):
+					pix[j] -= 1
+				else:
+					pix[j] += 1
+				# pix[j] -= 1
 
-def retr(filename):
-        img = Image.open(filename)
-        binary = ''
+		# Eighth pixel of every set tells
+		# whether to stop ot read further.
+		# 0 means keep reading; 1 means thec
+		# message is over.
+		if (i == lendata - 1):
+			if (pix[-1] % 2 == 0):
+				if(pix[-1] != 0):
+					pix[-1] -= 1
+				else:
+					pix[-1] += 1
 
-        if img.mode in ('RGBA'):
-                img = img.convert('RGBA')
-                datas = img.getdata()
+		else:
+			if (pix[-1] % 2 != 0):
+				pix[-1] -= 1
 
-                for item in datas:
-                        digit = decode(rgb2hex(item[0], item[1], item[2]))
-                        if digit == None:
-                                pass
-                        else:
-                                binary = binary + digit
+		pix = tuple(pix)
+		yield pix[0:3]
+		yield pix[3:6]
+		yield pix[6:9]
 
-                                if (binary[-16:] == '1111111111111110'):
-                                        print ("\n Success !!! Data found...\n Message Decrypted is...\n ~~~~~~~~~~~~~~~~~~~~~~~\n\n")
-                                        return bin2str(binary[:-16])
-                return bin2str(binary)
-        return "\n ***** Incorrect Image Mode was opened and we weren't able to decrypt your message *****"
+def encode_enc(newimg, data):
+	w = newimg.size[0]
+	(x, y) = (0, 0)
 
-def Main():
-        print ("\n\n\t\t\t ***** STEGANOGRAPHY PROJECT *****")
-        print ("\t\t\t ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
-        print ("\n\n Image steganograaphy is the art of encrypting messages into image files. \n This project implements the same concept.")
-        print ("\n\n Please select a valid option.\n")
-        print (" 1. ENCRYPT - This will hide your image in the picture you provide.")
-        print (" 2. DECRYPT - This will decode the message you have encrypted in the image you provide.\n\n")
-        choice = input(" Please choose a valid option (1/2): ")
+	for pixel in modPix(newimg.getdata(), data):
 
-        if choice == '1':
-                message = input(" Please enter your message: ")
-                filename = input(" Please select the image in which you wish to encrypt this information: ")
-                action = hide(filename, message)
-                print (action)
-        elif choice == '2':
-                filename = input(" Please select the image from which you wish to decrypt the information: ")
-                message = retr(filename)
-                print (" " + message)
-        else:
-                print ("You did not select a valid option!!! The program will now terminate!")
-        
-if __name__ == '__main__':
-        Main()
+		# Putting modified pixels in the new image
+		newimg.putpixel((x, y), pixel)
+		if (x == w - 1):
+			x = 0
+			y += 1
+		else:
+			x += 1
+
+# Encode data into image
+def encode():
+	img = input("\nPlease select the image in which you wish to encrypt this information : ")
+	image = Image.open(img, 'r')
+
+	data = input("\nEnter data to be encoded : ")
+	if (len(data) == 0):
+		raise ValueError('\nData is empty')
+
+	newimg = image.copy()
+	encode_enc(newimg, data)
+
+	new_img_name = input("\nEnter the name of new image with extension : ")
+	newimg.save(new_img_name, str(new_img_name.split(".")[1].upper()))
+# Decode the data in the image
+def decode():
+	img = input("\nPlease select the image from which you wish to decrypt the information: ")
+	image = Image.open(img, 'r')
+
+	data = ''
+	imgdata = iter(image.getdata())
+
+	while (True):
+		pixels = [value for value in imgdata.__next__()[:3] +
+								imgdata.__next__()[:3] +
+								imgdata.__next__()[:3]]
+
+		# string of binary data
+		binstr = ''
+
+		for i in pixels[:8]:
+			if (i % 2 == 0):
+				binstr += '0'
+			else:
+				binstr += '1'
+
+		data += chr(int(binstr, 2))
+		if (pixels[-1] % 2 != 0):
+			return data
+
+# Main Function
+def main():
+    print ("\n\n\t\t\t ***** STEGANOGRAPHY PROJECT *****")
+    print ("\t\t\t ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+    print ("\n\n Image steganograaphy is the art of encrypting messages into image files. \n This project implements the same concept.")
+    print ("\n\n Please select a valid option.\n")
+    print (" 1. ENCRYPT - This will hide your image in the picture you provide.")
+    print (" 2. DECRYPT - This will decode the message you have encrypted in the image you provide.\n\n")
+    a = int(input("\nPlease choose a valid option (1/2)\n"))
+    if (a == 1):
+        encode()
+        print("\nCompleted !!! Your message was successfully encoded.\n")
+        print("\n******************** END ********************")
+    elif (a == 2):
+        print("\nSuccess !!! Data found...\nDecoded Message : " + decode())
+        print("\n******************** END ********************")
+    else:
+        raise Exception("You did not select a valid option!!! The program will now terminate! Enter correct input")
+
+# Driver Code
+if __name__ == '__main__' :
+
+	# Calling main function
+	main()
